@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EduLearn LMS – Course Portal (LMS2)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="navbar">
+    <div class="navbar-brand">EduLearn LMS 2</div>
+    <div class="navbar-right" style="display: flex; gap: 1rem; align-items: center;">
+      <div class="navbar-user" id="navbar-user">Not logged in</div>
+      <button id="btn-signout" class="outline hidden" style="padding: 0.25rem 0.5rem; font-size: 0.85rem;">Sign out</button>
+    </div>
+  </div>
+
+  <!-- Login view -->
+  <div id="login-view" class="center-wrapper">
+    <div class="login-shell">
+      <div class="login-hero">
+        <div class="login-hero-badge">EduLearn LMS 2</div>
+        <h1>Welcome back</h1>
+        <p>Sign in to continue to your courses, track your progress, and stay on top of upcoming activities.</p>
+      </div>
+
+      <div class="card login-card">
+        <h2>Sign in</h2>
+
+      <div class="form-row">
+        <label>Username</label>
+        <input id="username" type="text" value="student_b01" />
+      </div>
+      <div class="form-row">
+        <label>Password</label>
+        <input id="password" type="password" value="password123" />
+      </div>
+      <button id="btn-login" class="primary">Log in</button>
+
+      <div id="login-info" class="small" style="margin-top: 0.75rem;"></div>
+      <div id="login-error" class="small" style="color: #ef4444; margin-top: 0.5rem;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dashboard view -->
+  <div id="dashboard-view" class="layout hidden">
+    <aside class="sidebar">
+      <h3>My courses</h3>
+      <button id="btn-load-courses" class="outline" style="margin-bottom: 0.5rem;">
+        Refresh courses
+      </button>
+      <div id="courses-list"></div>
+
+      <hr style="margin: 1rem 0; border-color: var(--border);" />
+      <button id="btn-my-performance" class="perf-btn hidden">My Performance</button>
+    </aside>
+
+    <main class="main">
+      <section id="course-content">
+        <div class="course-header">
+          <h2 id="course-title">Select a course</h2>
+          <p id="course-description">Choose a course from the left to see its content.</p>
+        </div>
+
+        <section id="activities-section" class="hidden">
+          <h3 style="margin: 0 0 1rem 0; font-size: 1.1rem;">Course content</h3>
+          <div class="activities-grid" id="activities-grid"></div>
+        </section>
+
+        <div id="status"></div>
+      </section>
+
+      <section id="performance-view" class="hidden">
+        <div class="perf-header">
+          <h2>My Performance</h2>
+          <p class="small">Powered by EduMind Analytics</p>
+        </div>
+        <div id="perf-loading" class="perf-loading hidden">Loading your performance data...</div>
+        <div id="perf-error" class="perf-error hidden"></div>
+        <div class="performance-grid" id="performance-grid"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
