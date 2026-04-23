@@ -19,7 +19,8 @@
   --text-muted: #64748b;
 
   /* Accents & Brand */
-  --accent-primary: #10b981; /* Emerald */
+  --accent-primary: #10b981;
+  /* Emerald */
   --accent-secondary: #34d399;
   --accent-glow: rgba(16, 185, 129, 0.15);
   --success: #22c55e;
@@ -213,14 +214,18 @@ body {
   color: var(--text-muted-on-dark);
 }
 
-.login-card input {
+.login-card input[type="text"],
+.login-card input[type="password"] {
   background: rgba(255, 255, 255, 0.05);
   border-color: rgba(255, 255, 255, 0.1);
   color: white;
 }
 
-.login-card input:focus {
-  background: rgba(255, 255, 255, 0.08);
+.login-card input[type="text"]:focus,
+.login-card input[type="password"]:focus {
+  background: rgba(255, 255, 255, 0.15); /* Significantly lighter for visibility */
+  border-color: var(--accent-primary);
+  color: white;
 }
 
 .form-row {
