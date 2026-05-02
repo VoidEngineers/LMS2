@@ -669,6 +669,107 @@ button.outline:hover {
   font-weight: 600;
 }
 
+.perf-eng-section {
+  margin-top: 0.85rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+}
+
+.perf-subheading {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.perf-score-badge-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.perf-spark {
+  display: flex;
+  align-items: flex-end;
+  justify-content: stretch;
+  gap: 4px;
+  height: 72px;
+  margin-top: 0.35rem;
+}
+
+.perf-spark-bar-wrap {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.perf-spark-bar {
+  width: 100%;
+  max-width: 14px;
+  margin: 0 auto;
+  border-radius: 4px 4px 2px 2px;
+  background: linear-gradient(180deg, var(--accent, #0d9488), #0f766e);
+  min-height: 4px;
+}
+
+.perf-spark-caption {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+}
+
+.perf-style-prob-row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr 2.5rem;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.perf-style-prob-row--current .perf-style-prob-name {
+  font-weight: 700;
+  color: var(--text, #0f172a);
+}
+
+.perf-style-prob-bar-bg {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bg-elevated, #f1f5f9);
+  overflow: hidden;
+}
+
+.perf-style-prob-bar {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent, #0d9488);
+}
+
+.perf-style-prob-pct {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.perf-risk-prob {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  flex: 1;
+  min-width: 0;
+}
+
 .perf-risk-row {
   display: flex;
   align-items: center;
@@ -694,6 +795,10 @@ button.outline:hover {
 
 .risk-low {
   background: var(--success);
+}
+
+.risk-unknown {
+  background: var(--text-muted);
 }
 
 .perf-alerts {
@@ -750,4 +855,48 @@ button.outline:hover {
 .perf-style-name {
   font-size: 1.15rem;
   font-weight: 700;
+}
+
+.perf-trend-caption {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0 0 0.65rem;
+}
+
+.perf-trend-chart-wrap {
+  width: 100%;
+  border-radius: 10px;
+  background: var(--bg-elevated, #f8fafc);
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.25rem 0;
+}
+
+.perf-trend-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  max-height: 280px;
+}
+
+.perf-trend-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.perf-trend-y-label,
+.perf-trend-x-label {
+  fill: var(--text-muted);
+  font-size: 11px;
+  font-family: inherit;
+}
+
+.perf-trend-line {
+  stroke: rgb(37, 99, 235);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.perf-trend-dot {
+  fill: rgb(37, 99, 235);
 }

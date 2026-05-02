@@ -1,3 +1,4 @@
+/* edumind-lms-performance-ui-v5 — if DevTools does not show this, the wrong app.js is being loaded */
 const API_BASE = "http://localhost:8011/api";
 const EDUMIND_ENGAGEMENT_API = "http://localhost:8005";
 const EDUMIND_LEARNING_API = "http://localhost:8006";
@@ -675,20 +676,24 @@ async function loadPerformance() {
   setStatus("Loading performance data...");
 
   try {
-    const [summary, dashboard, metrics, lsAnalytics] = await Promise.allSettled([
+    const [summary, dashboard, metrics, history30, analytics30, lsAnalytics, lsProfile] = await Promise.allSettled([
       edumindFetch(`${EDUMIND_ENGAGEMENT_API}/api/v1/engagement/students/${sid}/summary`),
       edumindFetch(`${EDUMIND_ENGAGEMENT_API}/api/v1/students/${sid}/dashboard?institute_id=${iid}`),
       edumindFetch(`${EDUMIND_ENGAGEMENT_API}/api/v1/engagement/students/${sid}/metrics?days=7`),
+      edumindFetch(`${EDUMIND_ENGAGEMENT_API}/api/v1/engagement/students/${sid}/history?days=30`),
+      edumindFetch(`${EDUMIND_ENGAGEMENT_API}/api/v1/students/${sid}/analytics?days=30&institute_id=${iid}`),
       edumindFetch(`${EDUMIND_LEARNING_API}/api/v1/students/${sid}/analytics`),
+      edumindFetch(`${EDUMIND_LEARNING_API}/api/v1/students/${sid}`),
     ]);
 
     perfLoadingEl.classList.add("hidden");
 
+    const trendRows = pickEngagementTrendRows(val(analytics30), val(history30));
+
     performanceGridEl.innerHTML =
-      renderEngagementCard(summary) +
-      renderRiskCard(dashboard) +
-      renderWeeklyCard(metrics) +
-      renderLearningStyleCard(lsAnalytics);
+      renderEngagementCard(summary, metrics, dashboard, trendRows) +
+      renderActivityGraphCard(metrics) +
+      renderLearningStyleCard(lsAnalytics, lsProfile);
     setStatus("Performance data loaded.");
   } catch (err) {
     perfLoadingEl.classList.add("hidden");
@@ -702,8 +707,147 @@ function val(settled) {
   return settled.status === "fulfilled" ? settled.value : null;
 }
 
-function renderEngagementCard(settled) {
-  const data = val(settled);
+/** Same series as EduMind /engagement: prefer institute-scoped analytics history, else raw score history. */
+function pickEngagementTrendRows(analyticsPayload, historyArr) {
+  const fromAnalytics =
+    analyticsPayload &&
+    Array.isArray(analyticsPayload.engagement_history) &&
+    analyticsPayload.engagement_history.length > 0
+      ? analyticsPayload.engagement_history
+      : null;
+  if (fromAnalytics) return fromAnalytics;
+  if (historyArr && Array.isArray(historyArr) && historyArr.length > 0) return historyArr;
+  return null;
+}
+
+function activityGraphSparkContent(rows) {
+  if (!rows || !Array.isArray(rows) || rows.length === 0) {
+    return `<p class="small">No daily metrics for this period.</p>`;
+  }
+  const vals = rows.map((d) =>
+    (d.login_count || 0) * 3 +
+    (d.page_views || 0) +
+    (d.video_plays || 0) * 2 +
+    (d.quiz_attempts || 0) * 4 +
+    (d.assignments_submitted || 0) * 5 +
+    (d.total_session_duration_minutes || 0) / 8 +
+    ((d.forum_posts || 0) + (d.forum_replies || 0)) * 3
+  );
+  const max = Math.max(...vals, 1);
+  const bars = rows.map((d, i) => {
+    const h = Math.max(6, Math.round((vals[i] / max) * 100));
+    const label = new Date(d.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return `<div class="perf-spark-bar-wrap" title="${label}"><div class="perf-spark-bar" style="height:${h}%"></div></div>`;
+  }).join("");
+  return `<div class="perf-spark" aria-label="Daily relative activity">${bars}</div>
+    <div class="perf-spark-caption">${rows.length} day window</div>`;
+}
+
+function renderActivityGraphCard(metricsSettled) {
+  const rows = val(metricsSettled);
+  return `<div class="perf-card">
+    <div class="perf-card-title">Activity graph</div>
+    ${activityGraphSparkContent(rows)}
+  </div>`;
+}
+
+function riskBlockHtml(dashboardSettled) {
+  const dash = val(dashboardSettled);
+  if (!dash || !dash.current_status) {
+    return `<div class="perf-eng-section">
+      <div class="perf-subheading">Risk and disengagement</div>
+      <p class="small">Risk data unavailable.</p>
+    </div>`;
+  }
+  const status = dash.current_status;
+  const riskLevel = status.risk_level || "Unknown";
+  const atRisk = status.at_risk;
+  const prob = status.risk_probability != null ? Math.round(status.risk_probability * 100) : null;
+  const riskClass =
+    riskLevel === "High" ? "risk-high" :
+      riskLevel === "Medium" ? "risk-med" :
+        riskLevel === "Low" ? "risk-low" : "risk-unknown";
+  const riskIcon = atRisk ? "⚠" : "✓";
+  return `<div class="perf-eng-section">
+    <div class="perf-subheading">Risk status and disengagement probability</div>
+    <div class="perf-risk-row">
+      <span class="perf-risk-badge ${riskClass}">${riskIcon} ${riskLevel}</span>
+      ${prob != null ? `<span class="perf-risk-prob">Disengagement probability: <strong>${prob}%</strong></span>` : ""}
+    </div>
+  </div>`;
+}
+
+function engagementTrend30EmbedHtml(rows) {
+  if (!rows || !Array.isArray(rows) || rows.length === 0) {
+    return `<div class="perf-eng-section">
+      <div class="perf-subheading">Engagement Trend (Last 30 Days)</div>
+      <p class="small">No engagement score history for this period.</p>
+    </div>`;
+  }
+
+  const scores = rows.map((r) => Math.max(0, Math.min(100, Number(r.engagement_score) || 0)));
+  const n = scores.length;
+  const W = 720;
+  const H = 220;
+  const padL = 44;
+  const padR = 12;
+  const padT = 12;
+  const padB = 32;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+  const yMin = 0;
+  const yMax = 100;
+  const xAt = (i) => padL + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+  const yAt = (s) => padT + plotH - ((s - yMin) / (yMax - yMin)) * plotH;
+
+  const linePts = scores.map((s, i) => `${xAt(i).toFixed(2)},${yAt(s).toFixed(2)}`).join(" ");
+  const firstX = xAt(0).toFixed(2);
+  const lastX = xAt(n - 1).toFixed(2);
+  const baseY = (padT + plotH).toFixed(2);
+  const areaD = `M ${firstX},${baseY} L ${scores.map((s, i) => `${xAt(i).toFixed(2)},${yAt(s).toFixed(2)}`).join(" L ")} L ${lastX},${baseY} Z`;
+
+  const labelStart = new Date(rows[0].date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const labelMid = n > 2
+    ? new Date(rows[Math.floor(n / 2)].date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    : "";
+  const labelEnd = new Date(rows[n - 1].date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  const yTicks = [0, 50, 100];
+  const gridAndLabels = yTicks.map((t) => {
+    const y = yAt(t).toFixed(2);
+    return `<line class="perf-trend-grid" x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" />
+      <text class="perf-trend-y-label" x="${padL - 6}" y="${y}" dominant-baseline="middle" text-anchor="end">${t}</text>`;
+  }).join("");
+
+  const xLabelsInner = n > 2
+    ? `<text class="perf-trend-x-label" x="${padL}" y="${H - 6}" text-anchor="start">${labelStart}</text>
+       <text class="perf-trend-x-label" x="${padL + plotW / 2}" y="${H - 6}" text-anchor="middle">${labelMid}</text>
+       <text class="perf-trend-x-label" x="${W - padR}" y="${H - 6}" text-anchor="end">${labelEnd}</text>`
+    : `<text class="perf-trend-x-label" x="${padL + plotW / 2}" y="${H - 6}" text-anchor="middle">${labelStart}</text>`;
+
+  return `<div class="perf-eng-section">
+    <div class="perf-subheading">Engagement Trend (Last 30 Days)</div>
+    <p class="perf-trend-caption">Daily engagement score (0–100)</p>
+    <div class="perf-trend-chart-wrap">
+      <svg class="perf-trend-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Engagement score over the last ${n} days">
+        <defs>
+          <linearGradient id="perfTrendFillEmbed" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="rgb(37, 99, 235)" stop-opacity="0.22"/>
+            <stop offset="100%" stop-color="rgb(37, 99, 235)" stop-opacity="0.02"/>
+          </linearGradient>
+        </defs>
+        ${gridAndLabels}
+        <path class="perf-trend-area" d="${areaD}" fill="url(#perfTrendFillEmbed)" />
+        <polyline class="perf-trend-line" fill="none" points="${linePts}" />
+        ${scores.map((s, i) => `<circle class="perf-trend-dot" cx="${xAt(i).toFixed(2)}" cy="${yAt(s).toFixed(2)}" r="2.5" />`).join("")}
+        ${xLabelsInner}
+      </svg>
+    </div>
+  </div>`;
+}
+
+function renderEngagementCard(summarySettled, metricsSettled, dashboardSettled, trendRows) {
+  const data = val(summarySettled);
   if (!data) {
     return `<div class="perf-card">
       <div class="perf-card-title">Engagement Summary</div>
@@ -712,146 +856,26 @@ function renderEngagementCard(settled) {
   }
 
   const score = Math.round(data.avg_engagement_score || 0);
-  const level = data.current_engagement_level || "N/A";
-  const trend = data.trend || "Stable";
   const days = data.days_tracked || 0;
-
-  const trendIcon = trend.toLowerCase().includes("improv") ? "↑" : trend.toLowerCase().includes("declin") ? "↓" : "•";
-  const trendClass = trend.toLowerCase().includes("improv") ? "trend-up" : trend.toLowerCase().includes("declin") ? "trend-down" : "trend-stable";
   const scoreClass = score >= 70 ? "score-high" : score >= 40 ? "score-med" : "score-low";
 
-  return `<div class="perf-card">
+  return `<div class="perf-card perf-card-wide">
     <div class="perf-card-title">Engagement Summary</div>
-    <div class="perf-score-row">
-      <div class="perf-score-badge ${scoreClass}">${score}%</div>
-      <div class="perf-score-detail">
-        <div class="perf-level">${level} engagement</div>
-        <div class="perf-trend ${trendClass}">${trendIcon} ${trend}</div>
-      </div>
+    <div class="perf-stat-row">
+      <span class="perf-stat-label">Avg engagement</span>
+      <span class="perf-stat-value perf-eng-avg"><span class="perf-score-badge-inline ${scoreClass}">${score}%</span></span>
     </div>
     <div class="perf-stat-row">
       <span class="perf-stat-label">Days tracked</span>
       <span class="perf-stat-value">${days}</span>
     </div>
+    ${riskBlockHtml(dashboardSettled)}
+    ${engagementTrend30EmbedHtml(trendRows)}
   </div>`;
 }
 
-function renderRiskCard(settled) {
-  const data = val(settled);
-  if (!data) {
-    return `<div class="perf-card">
-      <div class="perf-card-title">Risk Status</div>
-      <p class="small">Could not load risk data.</p>
-    </div>`;
-  }
-
-  const status = data.current_status || {};
-  const atRisk = status.at_risk;
-  const riskLevel = status.risk_level || "Unknown";
-  const prob = status.risk_probability != null ? Math.round(status.risk_probability * 100) : null;
-  const alerts = data.alerts || [];
-
-  const riskClass = riskLevel === "High" ? "risk-high" : riskLevel === "Medium" ? "risk-med" : "risk-low";
-  const riskIcon = atRisk ? "⚠" : "✓";
-
-  let alertsHtml = "";
-  if (alerts.length > 0) {
-    alertsHtml = `<div class="perf-alerts">
-      ${alerts.slice(0, 3).map((a) =>
-      `<div class="perf-alert perf-alert-${a.severity || "info"}">${a.message}</div>`
-    ).join("")}
-    </div>`;
-  }
-
-  const scores = data.component_scores || {};
-  let componentsHtml = "";
-  if (Object.keys(scores).length > 0) {
-    const labels = { login: "Login", session: "Session", interaction: "Interaction", forum: "Forum", assignment: "Assignment" };
-    componentsHtml = `<div class="perf-components">
-      ${Object.entries(scores).map(([k, v]) =>
-      `<div class="perf-comp-item">
-          <span class="perf-comp-label">${labels[k] || k}</span>
-          <div class="perf-comp-bar-bg"><div class="perf-comp-bar" style="width:${Math.min(Math.round(v), 100)}%"></div></div>
-          <span class="perf-comp-val">${Math.round(v)}</span>
-        </div>`
-    ).join("")}
-    </div>`;
-  }
-
-  return `<div class="perf-card">
-    <div class="perf-card-title">Risk Status</div>
-    <div class="perf-risk-row">
-      <span class="perf-risk-badge ${riskClass}">${riskIcon} ${riskLevel}</span>
-      ${prob != null ? `<span class="perf-risk-prob">${prob}% probability</span>` : ""}
-    </div>
-    ${alertsHtml}
-    ${componentsHtml}
-  </div>`;
-}
-
-function renderWeeklyCard(settled) {
-  const data = val(settled);
-  if (!data || !Array.isArray(data) || data.length === 0) {
-    return `<div class="perf-card">
-      <div class="perf-card-title">Weekly Activity</div>
-      <p class="small">No activity data for the past 7 days.</p>
-    </div>`;
-  }
-
-  const rows = data.map((d) => {
-    const dateStr = new Date(d.date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-    return `<tr>
-      <td>${dateStr}</td>
-      <td>${d.login_count || 0}</td>
-      <td>${d.page_views || 0}</td>
-      <td>${d.video_plays || 0}</td>
-      <td>${d.resource_downloads || 0}</td>
-      <td>${d.quiz_attempts || 0}</td>
-      <td>${(d.forum_posts || 0) + (d.forum_replies || 0)}</td>
-      <td>${Math.round(d.total_session_duration_minutes || 0)} min</td>
-    </tr>`;
-  }).join("");
-
-  const totals = data.reduce((acc, d) => {
-    acc.logins += d.login_count || 0;
-    acc.pages += d.page_views || 0;
-    acc.videos += d.video_plays || 0;
-    acc.diagrams += d.resource_downloads || 0;
-    acc.quizzes += d.quiz_attempts || 0;
-    acc.forum += (d.forum_posts || 0) + (d.forum_replies || 0);
-    acc.time += d.total_session_duration_minutes || 0;
-    return acc;
-  }, { logins: 0, pages: 0, videos: 0, diagrams: 0, quizzes: 0, forum: 0, time: 0 });
-
-  return `<div class="perf-card perf-card-wide">
-    <div class="perf-card-title">Weekly Activity</div>
-    <div class="perf-table-wrap">
-      <table class="perf-table">
-        <thead>
-          <tr>
-            <th>Date</th><th>Logins</th><th>Pages</th><th>Videos</th><th>Diagrams</th><th>Quizzes</th><th>Forum</th><th>Time</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-          <tr class="perf-table-total">
-            <td><strong>Total</strong></td>
-            <td><strong>${totals.logins}</strong></td>
-            <td><strong>${totals.pages}</strong></td>
-            <td><strong>${totals.videos}</strong></td>
-            <td><strong>${totals.diagrams}</strong></td>
-            <td><strong>${totals.quizzes}</strong></td>
-            <td><strong>${totals.forum}</strong></td>
-            <td><strong>${Math.round(totals.time)} min</strong></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>`;
-}
-
-function renderLearningStyleCard(settled) {
-  const data = val(settled);
+function renderLearningStyleCard(analyticsSettled, profileSettled) {
+  const data = val(analyticsSettled);
   if (!data) {
     return `<div class="perf-card">
       <div class="perf-card-title">Learning Style</div>
@@ -859,12 +883,13 @@ function renderLearningStyleCard(settled) {
     </div>`;
   }
 
+  const profile = val(profileSettled);
   const style = data.learning_style || "Unknown";
-  const confidence = data.style_confidence != null ? Math.round(data.style_confidence * 100) : null;
   const trend = data.engagement_trend || "stable";
-  const struggles = data.total_struggles || 0;
-  const unresolved = data.unresolved_struggles || 0;
   const effectiveTypes = data.most_effective_resource_types || [];
+  const probs = profile && typeof profile.style_probabilities === "object" && profile.style_probabilities
+    ? profile.style_probabilities
+    : {};
 
   const styleIcons = {
     Visual: "👁",
@@ -875,13 +900,32 @@ function renderLearningStyleCard(settled) {
   };
   const icon = styleIcons[style] || "❓";
 
-  let effectiveHtml = "";
-  if (effectiveTypes.length > 0) {
-    effectiveHtml = `<div class="perf-stat-row" style="margin-top:0.5rem;">
-      <span class="perf-stat-label">Best resource types</span>
-      <span class="perf-stat-value">${effectiveTypes.map((t) => t.resource_type).join(", ") || "—"}</span>
+  const probEntries = Object.entries(probs)
+    .map(([name, p]) => ({ name, pct: typeof p === "number" ? Math.round(p * 100) : 0 }))
+    .sort((a, b) => b.pct - a.pct);
+
+  let probsHtml = "";
+  if (probEntries.length > 0) {
+    const maxPct = Math.max(...probEntries.map((e) => e.pct), 1);
+    probsHtml = `<div class="perf-eng-section">
+      <div class="perf-subheading">All style estimates</div>
+      ${probEntries.map(({ name, pct }) => {
+      const isCurrent = name.toLowerCase() === String(style).toLowerCase();
+      const barW = Math.round((pct / maxPct) * 100);
+      return `<div class="perf-style-prob-row${isCurrent ? " perf-style-prob-row--current" : ""}">
+          <span class="perf-style-prob-name">${name}</span>
+          <div class="perf-style-prob-bar-bg"><div class="perf-style-prob-bar" style="width:${barW}%"></div></div>
+          <span class="perf-style-prob-pct">${pct}%</span>
+        </div>`;
+    }).join("")}
     </div>`;
+  } else {
+    probsHtml = `<div class="perf-eng-section"><p class="small">Style percentages will appear when the learning-style profile includes model scores.</p></div>`;
   }
+
+  const bestTypesLabel = effectiveTypes.length
+    ? effectiveTypes.map((t) => (t.count != null ? `${t.resource_type} (${t.count})` : t.resource_type)).join(", ")
+    : "—";
 
   const trendIcon = trend.toLowerCase().includes("improv") ? "↑" : trend.toLowerCase().includes("declin") ? "↓" : "•";
   const trendClass = trend.toLowerCase().includes("improv") ? "trend-up" : trend.toLowerCase().includes("declin") ? "trend-down" : "trend-stable";
@@ -891,18 +935,18 @@ function renderLearningStyleCard(settled) {
     <div class="perf-style-row">
       <span class="perf-style-icon">${icon}</span>
       <div>
+        <div class="perf-subheading" style="margin-bottom:0.25rem;">Current learning style</div>
         <div class="perf-style-name">${style}</div>
-        ${confidence != null ? `<div class="small">Confidence: ${confidence}%</div>` : ""}
       </div>
+    </div>
+    ${probsHtml}
+    <div class="perf-stat-row">
+      <span class="perf-stat-label">Best resource types</span>
+      <span class="perf-stat-value">${bestTypesLabel}</span>
     </div>
     <div class="perf-stat-row">
       <span class="perf-stat-label">Engagement trend</span>
       <span class="perf-stat-value ${trendClass}">${trendIcon} ${trend}</span>
     </div>
-    <div class="perf-stat-row">
-      <span class="perf-stat-label">Struggles detected</span>
-      <span class="perf-stat-value">${struggles} (${unresolved} unresolved)</span>
-    </div>
-    ${effectiveHtml}
   </div>`;
 }

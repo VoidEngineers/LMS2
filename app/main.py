@@ -3,21 +3,23 @@ Minimal LMS – FastAPI application.
 Phase 1: Skeleton with health check.
 """
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
 from datetime import datetime
 from pathlib import Path
 
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+
 from app.api import routes_auth, routes_courses, routes_events
-from app.core.config import settings
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from app.core.database import init_db
+
     init_db()
     yield
+
 
 app = FastAPI(
     title="Minimal LMS",
@@ -88,6 +90,42 @@ def docs_simple():
     """
 
 
-# Serve the simple frontend (static HTML/JS/CSS) from /frontend
+# --- LMS UI (explicit routes: always read from this package's frontend/ folder, never cached) ---
 _frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
-app.mount("/frontend", StaticFiles(directory=str(_frontend_dir), html=True), name="frontend")
+_NO_CACHE = {
+    "Cache-Control": "no-store, max-age=0, must-revalidate",
+    "Pragma": "no-cache",
+    "X-EduMind-LMS-Assets": "explicit-file-response-v1",
+}
+
+
+def _frontend_file(name: str, media_type: str) -> FileResponse:
+    path = _frontend_dir / name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"Frontend asset missing: {name} (dir={_frontend_dir})")
+    return FileResponse(path, media_type=media_type, headers=dict(_NO_CACHE), content_disposition_type="inline")
+
+
+@app.get("/frontend")
+def frontend_redirect():
+    return RedirectResponse(url="/frontend/index.html", status_code=302)
+
+
+@app.get("/frontend/")
+def frontend_index_trailing_slash():
+    return _frontend_file("index.html", "text/html; charset=utf-8")
+
+
+@app.get("/frontend/index.html")
+def frontend_index():
+    return _frontend_file("index.html", "text/html; charset=utf-8")
+
+
+@app.get("/frontend/app.js")
+def frontend_app_js():
+    return _frontend_file("app.js", "application/javascript; charset=utf-8")
+
+
+@app.get("/frontend/styles.css")
+def frontend_styles():
+    return _frontend_file("styles.css", "text/css; charset=utf-8")
